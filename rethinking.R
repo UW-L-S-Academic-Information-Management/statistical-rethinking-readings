@@ -52,4 +52,7 @@ simplehist(dummy_w, xlab="dummy water count")
 #pg 66 (propagate uncertainty in parameters to predictions)
 w <- rbinom(10000, size = 9, prob = samples)
 
+#pg 72
+pos <- replicate(1000, sum(runif(16,)))
+
 
