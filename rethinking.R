@@ -56,3 +56,38 @@ w <- rbinom(10000, size = 9, prob = samples)
 pos <- replicate(1000, sum(runif(16,)))
 
 
+#pg 74
+growth <- replicate(10000, prod(1+ runif(12, 0, 0.1)))
+dens(growth, norm.comp=TRUE)
+
+big <- replicate(10000, prod(1+ runif(12,0,0.5)))
+small <- replicate(10000, prod(1 + runif(12,0, 0.01)))
+
+log.big <- replicate(10000, log(prod(1+runif(12, 0, 0.5))))
+
+
+
+
+
+
+#pg. 87
+data(Howell1)
+d <- Howell1
+d2 <- d[d$age >= 18,]
+d3 <- sample(d2$height, size=20)
+
+#pg87
+mu.list <- seq(from=150, to=170, length.out=200) 
+sigma.list <- seq(from=4, to=20, length.out=200)
+post2 <- expand.grid(mu=mu.list, sigma=sigma.list)
+post2$LL <- sapply(1:nrow(post2), function(i)
+  sum(dnorm(d3, mean=post2$mu[i], sd=post2$sigma[i], log=TRUE)))
+post2$prod <- post2$LL + dnorm(post2$mu, 178, 20, TRUE) + dunif(post2$sigma, 0, 50, TRUE)
+post2$prod <- exp(post2$prod - max(post2$prod))
+sample2.rows <- sample(1:nrow(post2), size=1e4, replace=TRUE, prob=post2$prod)
+sample2.mu <- post2$mu[sample2.rows]
+sample2.sigma <- post2$sigma[sample2.rows]
+plot(sample2.mu, sample2.sigma, cex=0.5, col=col.alpha(rangi2,0.1),
+     xlab="mu", ylab="sigma", pch=16)
+
+dens(sample2.sigma, norm.comp=TRUE)
