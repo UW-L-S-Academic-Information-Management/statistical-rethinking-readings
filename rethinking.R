@@ -91,3 +91,174 @@ plot(sample2.mu, sample2.sigma, cex=0.5, col=col.alpha(rangi2,0.1),
      xlab="mu", ylab="sigma", pch=16)
 
 dens(sample2.sigma, norm.comp=TRUE)
+
+xbar <- mean(d2$weight)
+
+
+m4.3 <- quap(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a + b*(weight - xbar),
+    a ~ dnorm(178, 20),
+    b ~ dlnorm (0,1),
+    sigma ~ dunif(0, 50))
+  , data = d2)
+  
+
+mu <- link(m4.3)
+str(mu)
+
+weight.seq <- seq(from = 25, to = 70, by= 1)
+
+mu <- link(m4.3, data=data.frame(weight=weight.seq))
+str(mu)
+
+mu.mean <- apply(mu, 2, mean)
+mu.PI <- apply(mu, 2, PI, prob=0.89)
+
+plot(height ~ weight, data = d2, xlim = c(24, 75) , col=col.alpha(rangi2, 0.5))
+lines(weight.seq, mu.mean)
+shade(mu.PI, weight.seq)
+
+#pg 108
+sim.height <- sim (m4.3, data = list(weight=weight.seq))
+str(sim.height)
+
+height.PI <- apply(sim.height, 2, PI, prob=0.89)
+
+mu.mean <- apply(mu, 2, mean)
+mu.HPDI <- apply(mu, 2, HPDI, prob = 0.89)
+
+plot(height ~ weight, d2, xlim = c(24, 75) ,col= col.alpha(rangi2, .5))
+lines(weight.seq, mu.mean)
+shade(mu.HPDI, weight.seq)
+shade (height.PI, weight.seq)
+
+
+rm(list = ls())
+
+data(Howell1)
+d <- Howell1
+plot(height ~ weight, d)
+
+#pg 111
+#quadratic
+d$weight_s <- (d$weight - mean(d$weight))/sd(d$weight)
+d$weight_s2 <- d$weight_s^2
+m4.5 <- quap(
+        alist(
+          height ~ dnorm(mu, sigma) ,
+          mu <- a + b1*weight_s + b2*weight_s2 ,
+          a ~ dnorm(178, 20),
+          b1 ~ dlnorm(0,1) ,
+          b2 ~ dnorm(0,1) , 
+          sigma ~ dunif(0,50) )
+        , data = d)
+
+#pg 112
+weight.seq <- seq(from = -2.2, to = 2, length.out=30)
+pred_dat <- list(weight_s=weight.seq, weight_s2=weight.seq^2)
+mu <- link(m4.5, data=pred_dat)
+mu.mean <- apply(mu, 2, mean)
+mu.PI <- apply(mu, 2, PI, prob=.89)
+sim.height <- sim(m4.5, data = pred_dat)
+height.PI <- apply(sim.height,2, PI, prob=.89)
+        
+plot(height ~ weight_s, d, col=col.alpha(rangi2, .5))
+lines(weight.seq, mu.mean)
+shade(mu.PI, weight.seq)
+shade(height.PI, weight.seq)
+
+#pg113
+#cubic
+d$weight_s3 <- d$weight_s^3
+m4.6 <- quap(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a + b1*weight_s + b2*weight_s2 + b3*weight_s3,
+    a ~ dnorm(178, 20),
+    b1 ~ dlnorm(0,1),
+    b2 ~ dnorm(0,10),
+    b3 ~ dnorm(0,10),
+    sigma ~ dunif(0,50)), data=d)
+
+weight.seq <- seq(from = -2.2, to = 2, length.out=30)
+pred_dat <- list(weight_s=weight.seq, weight_s2=weight.seq^2, 
+                 weight_s3 = weight.seq^3)
+mu <- link(m4.6, data=pred_dat)
+mu.mean <- apply(mu, 2, mean)
+mu.PI <- apply(mu, 2, PI, prob=.89)
+sim.height <- sim(m4.6, data = pred_dat)
+height.PI <- apply(sim.height,2, PI, prob=.89)
+
+plot(height ~ weight_s, d, col=col.alpha(rangi2, .5))
+lines(weight.seq, mu.mean)
+shade(mu.PI, weight.seq)
+shade(height.PI, weight.seq)
+
+#pg 114
+#natural scale for x-axis
+
+plot(height ~ weight_s, d, col=col.alpha(rangi2, .5), xaxt="n")
+at <- c(-2,-1,0,1,2)
+labels <- at * sd(d$weight) + mean(d$weight)
+axis(side = 1, at=at, labels = round(labels,1))
+lines(weight.seq, mu.mean)
+shade(mu.PI, weight.seq)
+shade(height.PI, weight.seq)
+
+rm(list = ls())
+data(cherry_blossoms)
+d <- cherry_blossoms
+precis(d)
+
+
+#pg 114 splines
+plot(doy~year, data = d)
+
+#pg 117
+d2 <- d[complete.cases(d$doy),]
+num_knots <- 15
+knot_list <- quantile(d2$year, probs=seq(0,1,length.out=num_knots))
+library(splines)
+B <- bs(d2$year,
+        knots = knot_list[-c(1, num_knots)],
+        degree = 3, intercept = TRUE)
+plot(NULL, xlim=range(d2$year), ylim=c(0,1), xlab = "year", ylab="basis")
+for(i in 1:ncol(B)) lines(d2$year, B[,i])
+
+#pg. 119
+m4.7 <- quap(
+        alist(
+          D ~ dnorm(mu, sigma),
+          mu <- a + B %*% w , 
+          a ~ dnorm(100,10), 
+          w ~ dnorm(0,10),
+          sigma ~ dexp(1)
+        ), data = list(D=d2$doy, B=B) ,
+        start = list(w = rep(0, ncol(B)))
+)
+
+post <- extract.samples(m4.7)
+w <- apply(post$w, 2, mean)
+plot(NULL, xlim = range(d2$year), ylim = c(-6,6),
+     xlab = "year", ylab = "basis * weight")
+for(i in 1:ncol(B))
+  lines(d2$year, w[i] * B[,i])
+
+
+mu <- link(m4.7)
+mu_PI <- apply(mu, 2, PI, .97)
+plot(d2$year, d2$doy, col=col.alpha(rangi2, .3), pch = 16)
+shade(mu_PI, d2$year, col=col.alpha("black", .5))
+
+
+#Chapter 5
+#pg 125
+
+rm(list = ls())
+data("WaffleDivorce")
+d <- WaffleDivorce
+d$D <- standardize(d$Divorce)
+d$M <- standardize(d$Marriage)
+d$A <- standardize(d$MedianAgeMarriage)
