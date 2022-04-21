@@ -408,7 +408,7 @@ m5.3 <- quap(
       sigma ~ dexp(1) ),
   data = d)
 precis(m5.3)
-plot(coeftab(m5.1, m5.2, m5.3), par=c("bA", "bM"))
+plot(coeftab(m5.1, m5.2, m5.3))# , par=c("bA", "bM"))
 
 
 #pg. 134
@@ -493,3 +493,413 @@ plot(sim_dat$M, colMeans(s), ylim=c(-2,2), type = "l",
      xlab = "manipulated M", ylab = "counterfactual D")
 shade(apply(s,2,PI), sim_dat$M)
 mtext("Total counterfactual effect of M on D")
+
+#pg 144
+
+library(rethinking)
+data(milk)
+d <- milk
+str(d)
+
+d$K <- standardize(d$kcal.per.g)
+d$N <- standardize(d$neocortex.perc)
+d$M <- standardize(log(d$mass))
+
+
+m5.5_draft <- quap(
+      alist(
+        K ~ dnorm(mu, sigma) , 
+        mu <- a + bN*N,
+        a ~ dnorm(0, 1),
+        bN ~ dnorm(0,1),
+        sigma ~ dexp(1)
+      ), data = d
+)
+
+d$neocortex.perc
+
+dcc <- d[complete.cases(d$K, d$N, d$M),]
+
+m5.5_draft <- quap(
+  alist(
+    K ~ dnorm(mu, sigma) , 
+    mu <- a + bN*N,
+    a ~ dnorm(0, 1),
+    bN ~ dnorm(0,1),
+    sigma ~ dexp(1)
+  ), data = dcc
+)
+
+prior <- extract.prior(m5.5_draft)
+xseq <- c(-2,2)
+mu <- link(m5.5_draft, post=prior, data = list(N=xseq))
+plot(NULL, xlim=xseq, ylim=xseq)
+for(i in 1:50) lines(xseq, mu[i,], col=col.alpha("black", .3))
+
+m5.5 <- quap(
+  alist(
+    K ~ dnorm(mu, sigma) , 
+    mu <- a + bN*N,
+    a ~ dnorm(0, .2),
+    bN ~ dnorm(0,.5),
+    sigma ~ dexp(1)
+  ), data = dcc
+)
+
+prior <- extract.prior(m5.5)
+xseq <- c(-2,2)
+mu <- link(m5.5, post=prior, data = list(N=xseq))
+plot(NULL, xlim=xseq, ylim=xseq)
+for(i in 1:50) lines(xseq, mu[i,], col=col.alpha("black", .3))
+
+#6.1, pg. 163
+N <- 100
+set.seed(909)
+height <- rnorm(N,10,2)
+leg_prop <- runif(N, 0.4, 0.5)
+leg_left <- leg_prop*height + rnorm(N, 0, .02)
+leg_right <- leg_prop*height + rnorm(N, 0, .02)
+d <- data.frame(height, leg_left, leg_right)
+
+m6.1 <- quap(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a + bl * leg_left + br*leg_right,
+    a ~ dnorm(10,100),
+    bl ~ dnorm(2, 10),
+    br ~ dnorm(2, 10),
+    sigma ~ dexp(1)
+    ), data = d)
+precis(m6.1)
+plot(summary(m6.1))
+
+post <- extract.samples(m6.1)
+plot( bl ~ br, post, col=col.alpha(rangi2, .1), pch=16)
+
+sum_blbr <- post$bl + post$br
+dens(sum_blbr, col=rangi2, lwd = 2, xlab="sum of bl and br")
+
+m6.2 <- quap(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a + bl*leg_left,
+    a ~ dnorm(10, 100),
+    bl ~ dnorm(2,10),
+    sigma ~ dexp(1))
+    ,data = d
+  )
+precis(m6.2)
+
+
+
+#pg 170
+library(rethinking)
+data(milk)
+d <- milk
+sim.coll <- function(r=.9) {
+  d$x <- rnorm(nrow(d), mean=r*d$perc.fat,
+               sd=sqrt((1-r^2) * var(d$perc.fat)))
+          m <- lm(kcal.per.g ~ perc.fat + x, data = d)
+          sqrt(diag(vcov(m)))[2] #stdv of the parameter
+}
+rep.sim.coll <- function(r=.9, n=100){
+  stddev <- replicate(n, sim.coll(r))
+  mean(stddev)
+}
+r.seq <- seq(from=0, to=.99, by = .01)
+stddev <- sapply(r.seq, function(z) rep.sim.coll(r=z, n= 100))
+plot(stddev~r.seq,type="l", col=rangi2,lwd=2, xlab="correlation")
+
+#pg. 171
+set.seed(71)
+#number of plants
+N <- 100
+
+#simulate initial heights
+h0 <- rnorm(N, 10, 2)
+
+#assign treatments and simulate fungus and growth
+treatment <- rep(0:1, each=N/2)
+fungus <- rbinom(N, size=1, prob=.5 - treatment*.4)
+h1 <- h0 + rnorm(N,5-3*fungus)
+d <- data.frame(h0, h1, treatment, fungus)
+
+#pg 172
+sim_p <- rlnorm(10000, 0, .25)
+
+m6.6 <- quap(
+  
+  alist(
+    h1 ~dnorm(mu, sigma), 
+    mu <- h0*p,
+    p~dlnorm(0,.25),
+    sigma ~dexp(1)
+  ), data = d
+)
+
+
+m6.7 <- quap(
+  alist(
+    h1 ~ dnorm(mu, sigma),
+    mu <- h0 *p,
+    p <- a + bt*treatment + bf*fungus,
+    a ~ dlnorm(0, .2),
+    bt ~ dnorm(0, .5),
+    bf ~ dnorm(0, .5),
+    sigma ~ dexp(1)
+  ), data = d)
+
+m6.8 <- quap(
+  alist(
+    h1 ~ dnorm(mu, sigma),
+    mu <- h0 *p,
+    p <- a + bt*treatment,
+    a ~ dlnorm(0, 0.2),
+    bt ~ dnorm(0, .5),
+    sigma ~ dexp(1)
+  ), data = d)
+
+##chapter 7
+##pg. 194
+
+sppnames <- c("afarensis", "africanus", "habilis", "boisei", "rudolfensis", 
+              "ergaster", "sapiens")
+brainvolcc <- c(438, 452, 612, 521, 752, 871, 1350)
+masskg <- c(37.0, 35.5, 34.5, 41.5, 55.5, 61.0, 53.5)
+d <- data.frame(species=sppnames, brain=brainvolcc, mass = masskg)
+d$mass_std <- (d$mass - mean(d$mass))/sd(d$mass)
+d$brain_std <- d$brain / max(d$brain)
+
+#pg. 196
+m7.1 <- quap(
+  alist(
+    brain_std ~ dnorm(mu, exp(log_sigma)),
+    mu <- a + b*mass_std,
+    a ~ dnorm(0.5, 1),
+    b ~ dnorm(0, 10),
+    log_sigma ~ dnorm(0,1)
+  ), data = d
+)
+
+set.seed(12)
+s <- sim(m7.1)
+r <- apply(s,2,mean) - d$brain_std
+resid_var <- var2(r)
+outcome_var <- var2(d$brain_std)
+1 - resid_var/outcome_var
+
+R2_is_bad <- function(quap_fit){
+  s <- sim(quap_fit, refesh = 0)
+  r <- apply(s, 2, mean) - d$brain_std
+  1 - var2(r)/var2(d$brain_std)
+}
+
+m7.2 <- quap(
+  alist(
+    brain_std ~ dnorm(mu, exp(log_sigma)),
+    mu <- a + b[1]*mass_std + b[2]*mass_std^2,
+    a~dnorm(0.5,1),
+    b~dnorm(0,10),
+    log_sigma ~ dnorm(0,1)
+  ),
+  data = d, start = list(b=rep(0,2)))
+
+m7.3 <- quap(
+  alist(
+    brain_std ~ dnorm(mu, exp(log_sigma)),
+    mu <- a + b[1]*mass_std + b[2]*mass_std^2 + 
+      b[3]*mass_std^3,
+    a~dnorm(0.5,1),
+    b~dnorm(0,10),
+    log_sigma ~ dnorm(0,1)
+  ),
+  data = d, start = list(b=rep(0,3)))
+
+
+m7.4 <- quap(
+  alist(
+    brain_std ~ dnorm(mu, exp(log_sigma)),
+    mu <- a + b[1]*mass_std + b[2]*mass_std^2 + 
+      b[3]*mass_std^3 + b[4]*mass_std^4,
+    a~dnorm(0.5,1),
+    b~dnorm(0,10),
+    log_sigma ~ dnorm(0,1)
+  ),
+  data = d, start = list(b=rep(0,4)))
+
+m7.5 <- quap(
+  alist(
+    brain_std ~ dnorm(mu, exp(log_sigma)),
+    mu <- a + b[1]*mass_std + b[2]*mass_std^2 + 
+      b[3]*mass_std^3 + b[4]*mass_std^4 + 
+      b[5]*mass_std^5,
+    a~dnorm(0.5,1),
+    b~dnorm(0,10),
+    log_sigma ~ dnorm(0,1)
+  ),
+  data = d, start = list(b=rep(0,5)))
+
+m7.6 <- quap(
+  alist(
+      brain_std ~ dnorm(mu, 0.001),
+      mu <- a + b[1]*mass_std + b[2]*mass_std^2 + 
+        b[3]*mass_std^3 + b[4]*mass_std^4  + 
+        b[5]*mass_std^5 + b[6]*mass_std^6,
+      a~dnorm(0.5,1),
+      b~dnorm(0,10),
+      log_sigma ~ dnorm(0,1)
+    ),
+    data = d, start = list(b=rep(0,6)))
+
+#plots from pg. 200
+{
+post <- extract.samples(m7.1)
+mass_seq <- seq(from=min(d$mass_std), to=max(d$mass_std),
+                length.out=100)
+l <- link(m7.1, data=list(mass_std=mass_seq))
+mu <- apply(l, 2, mean)
+ci <- apply(l, 2, PI)
+plot(brain_std ~ mass_std, data = d)
+lines(mass_seq, mu)
+shade(ci, mass_seq)
+
+post <- extract.samples(m7.2)
+mass_seq <- seq(from=min(d$mass_std), to=max(d$mass_std),
+                length.out=100)
+l <- link(m7.2, data=list(mass_std=mass_seq))
+mu <- apply(l, 2, mean)
+ci <- apply(l, 2, PI)
+plot(brain_std ~ mass_std, data = d)
+lines(mass_seq, mu)
+shade(ci, mass_seq)
+
+
+post <- extract.samples(m7.3)
+mass_seq <- seq(from=min(d$mass_std), to=max(d$mass_std),
+                length.out=100)
+l <- link(m7.3, data=list(mass_std=mass_seq))
+mu <- apply(l, 2, mean)
+ci <- apply(l, 2, PI)
+plot(brain_std ~ mass_std, data = d)
+lines(mass_seq, mu)
+shade(ci, mass_seq)
+
+
+post <- extract.samples(m7.4)
+mass_seq <- seq(from=min(d$mass_std), to=max(d$mass_std),
+                length.out=100)
+l <- link(m7.4, data=list(mass_std=mass_seq))
+mu <- apply(l, 2, mean)
+ci <- apply(l, 2, PI)
+plot(brain_std ~ mass_std, data = d)
+lines(mass_seq, mu)
+shade(ci, mass_seq)
+
+post <- extract.samples(m7.5)
+mass_seq <- seq(from=min(d$mass_std), to=max(d$mass_std),
+                length.out=100)
+l <- link(m7.5, data=list(mass_std=mass_seq))
+mu <- apply(l, 2, mean)
+ci <- apply(l, 2, PI)
+plot(brain_std ~ mass_std, data = d)
+lines(mass_seq, mu)
+shade(ci, mass_seq)
+
+post <- extract.samples(m7.6)
+mass_seq <- seq(from=min(d$mass_std), to=max(d$mass_std),
+                length.out=100)=
+l <- link(m7.6, data=list(mass_std=mass_seq))
+mu <- apply(l, 2, mean)
+ci <- apply(l, 2, PI)
+plot(brain_std ~ mass_std, data = d)
+lines(mass_seq, mu)
+shade(ci, mass_seq)
+
+}
+
+#pg 206
+p <- c(.15, .7, .15)
+-sum(p*log(p))
+
+#pg. 226
+set.seed(11)
+WAIC(m6.7)
+
+set.seed(77)
+compare(m6.6, m6.7, m6.8, func=WAIC)
+compare(m6.6, m6.7, m6.8, func=PSIS)
+
+set.seed(91)
+waic_m6.7 <- WAIC(m6.7, pointwise=TRUE)$WAIC
+waic_m6.8 <- WAIC(m6.8, pointwise=TRUE)$WAIC
+n <- length(waic_m6.7)
+diff_m6.7_m6.8 <- waic_m6.7- waic_m6.8
+sqrt(n*var(diff_m6.7_m6.8))
+plot(compare(m6.6, m6.7, m6.8))
+
+set.seed(92)
+waic_m6.6 <- WAIC(m6.6, pointwise=TRUE)$WAIC
+diff_m6.6_m6.8 <- waic_m6.6 - waic_m6.8
+sqrt(n*var(diff_m6.6_m6.8))
+set.seed(93)
+compare(m6.6, m6.7, m6.8)@dSE
+
+#pg 230
+
+library(rethinking)
+data(WaffleDivorce)
+d <- WaffleDivorce
+d$A <- standardize(d$MedianAgeMarriage)
+d$D <- standardize(d$Divorce)
+d$M <- standardize(d$Marriage)
+
+m5.1 <- quap(
+  alist(
+    D~dnorm(mu,sigma),
+    mu <- a +bA*A,
+    a ~ dnorm(0,.2),
+    bA~dnorm(0, .5),
+    sigma~dexp(1)),
+  data = d)
+
+
+m5.2 <- quap(
+  alist(
+    D ~ dnorm(mu, sigma),
+    mu <- a + bM * M,
+    a ~ dnorm(0, .2),
+    bM ~ dnorm(0, .5),
+    sigma ~ dexp(1)),
+  data = d)
+
+m5.3 <- quap(
+  alist(
+    D ~ dnorm(mu, sigma),
+    mu <- a + bM * M + bA*A,
+    a ~ dnorm(0, .2),
+    bM ~dnorm(0, .5),
+    bA ~dnorm(0, .5),
+    sigma ~ dexp(1) ),
+  data = d)
+
+set.seed(24071847)
+compare(m5.1, m5.2, m5.3, func=PSIS)
+
+set.seed(24071847)
+PSIS_m5.3 <- PSIS(m5.3,pointwise = TRUE)
+set.seed(24071847)
+WAIC.m5.3 <- WAIC(m5.3, pointwise = TRUE)
+plot(PSIS_m5.3$k, WAIC.m5.3$penalty, xlab = "PSIS Pareto k",
+     ylab="WAIC penalty", col=rangi2, lwd=2)
+
+m5.3t <- quap(
+  alist(
+    D ~ dstudent(2, mu, sigma),
+    mu <- a + bM * M + bA*A,
+    a ~ dnorm(0, .2),
+    bM ~dnorm(0, .5),
+    bA ~dnorm(0, .5),
+    sigma ~ dexp(1) ),
+  data = d)
+  )
+)
