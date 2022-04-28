@@ -844,6 +844,20 @@ sqrt(n*var(diff_m6.6_m6.8))
 set.seed(93)
 compare(m6.6, m6.7, m6.8)@dSE
 
+
+#pg 213 overthinking
+#This takes A LONG TIME!
+N <- 20
+kseq <- 1:5
+dev <- sapply(kseq, function(k){
+  print(k);
+  r <- replicate(10000, sim_train_test(N=N, k=k));
+  c(mean(r[1,]), mean(r[2,]), sd(r[1,]), sd(r[2,]))
+  
+})
+
+
+
 #pg 230
 
 library(rethinking)
