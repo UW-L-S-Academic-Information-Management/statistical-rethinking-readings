@@ -1048,6 +1048,15 @@ delta <- muA-muN
 
 
 
+#fit a lm model to the data
+
+lm.african_interaction <- lm(log_gdp ~  cont_africa + rugged_std + cont_africa*rugged_std, data = dd)
+lm.african <- lm(log_gdp ~  cont_africa + rugged_std, data = dd)
+
+summary(lm.african_interaction)
+summary(lm.african)
+
+
 #pg. 253
 
 library(rethinking)
@@ -1108,17 +1117,23 @@ for(s in -1:1){
 
 #prior plots
 set.seed(7)
-prior <- extract.prior(m8.5)
+prior <- extract.prior(m8.4)
 par(mfrow=c(1,3)) 
 for(s in -1:1){
   idx <- which(d$shade_cent==s)
   plot(d$water_cent[idx], d$blooms_std[idx], xlim=c(-1,1), ylim=c(0,1),
-       xlab="water", ylab = "blooms", pch=16, col=rangi2)
+       xlab="water", ylab = "blooms", pch=16, col=rangi2,
+       main= paste("m8.4 prior: shade =", as.character(s)), 
+       xaxt = "n", yaxt = "n")
+  axis(1, at = c(-1,0,1))
+  axis(2, at = c(0,.5,1))
   mu <- link(m8.4, data= data.frame(shade_cent=s, water_cent=-1:1), post=prior)
   for(i in 1:20) lines(-1:1, mu[i,], col=col.alpha("black", .3))
 }
 
 #same plot for m8.5
+set.seed(7)
+prior <- extract.prior(m8.5)
 par(mfrow=c(1,3)) 
 for(s in -1:1){
   idx <- which(d$shade_cent==s)
@@ -1128,4 +1143,55 @@ for(s in -1:1){
   for(i in 1:20) lines(-1:1, mu[i,], col=col.alpha("black", .3))
 }
 
+#9.1
+#
+
+num_weeks <- 100000
+positions <- rep(0,num_weeks)
+current <- 10
+for(i in 1:num_weeks){
+  #record current position
+  positions[i] <- current
+  #flip coin to generate proposal
+  proposal <- current + sample(c(-1,1), size = 1)
+  #make sure he loops
+  if(proposal < 1) proposal <- 10
+  if(proposal > 10) proposal <- 1
+  #move?
+  prob_move <- proposal/current
+  current <- ifelse(runif(1) < prob_move, proposal, current)
+}
+
+plot(1:100, positions[1:100])
+plot(table(positions))
+
+#pg 279
+
+library(rethinking)
+data(rugged)
+d <- rugged
+d$log_gdp <- log(d$rgdppc_2000)
+dd <- d[complete.cases(d$rgdppc_2000),]
+dd$log_gdp_std <- dd$log_gdp/mean(dd$log_gdp)
+dd$rugged_std <- dd$rugged/max(dd$rugged)
+dd$cid <- ifelse(dd$cont_africa==1,1,2)
+
+#the same model as 8.3 but not using quap
+#pg 280
+data_slim <- list(
+  log_gdp_std = dd$log_gdp_std,
+  rugged_std = dd$rugged_std,
+  cid = as.integer(dd$cid)
+)
+str(data_slim)
+
+m9.1 <- ulam(
+  alist(
+    log_gdp_std ~ dnorm(mu,sigma),
+    mu <- a[cid] + b[cid]*(rugged_std - 0.215),
+    a[cid] ~ dnorm(1,.1),
+    b[cid] ~ dnorm(0, .3),
+    sigma ~ dexp(1)
+  ), data = data_slim,chains=4, cores = 4
+)
 
