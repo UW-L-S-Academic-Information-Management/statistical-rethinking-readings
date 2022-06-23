@@ -1483,3 +1483,169 @@ round(pg, 2)
 
 y <- rbinom(100000, 1000, 1/1000)
 c(mean(y), var(y))
+
+library(rethinking)
+data(Kline)
+d <- Kline
+d
+
+d$P <- scale(log(d$population))
+d$contact_id <- ifelse(d$contact == "high", 2, 1)
+
+curve(dlnorm(x, 0, 10), from=0, to=100, n=200)
+a <- rnorm(1000, 0, 10)
+lambda <- exp(a)
+mean(lambda)
+curve(dlnorm(x, 3, .5), from =0, to=100, n=200)
+
+N <- 100
+a <- rnorm(N, 3, .5)
+b <- rnorm(N, 0, 10)
+plot(NULL, xlim=c(-2,2), ylim = c(0,100))
+for(i in 1:N) curve(exp(a[i] + b[i] * x), add = TRUE, col=grau())
+
+set.seed(10)
+N <- 100
+a <- rnorm(N, 3, .5)
+b <- rnorm(N, 0, 0.2)
+plot(NULL, xlim=c(-2,2), ylim = c(0,100))
+for(i in 1:N) curve(exp(a[i] + b[i] * x), add = TRUE, col=grau())
+
+x_seq <- seq(from = log(100), to = log(200000), length.out = 100)
+lambda <- sapply(x_seq, function(x) exp(a+b*x))
+plot(NULL, xlim = range(x_seq), ylim = c(0,500), xlab = "log population",
+     ylab = "total tools")
+for(i in 1:N) lines(x_seq, lambda[i,], col=grau(), lwd=1.5)
+
+plot(NULL, xlim = range(exp(x_seq)), ylim = c(0,500), xlab = "population", 
+     ylab = "total tools")
+for (i in 1:N) lines(exp(x_seq), lambda[i,], col=grau(), lwd=1.5)
+
+
+#pg 352
+
+dat <- list(
+  T = d$total_tools,
+  P = d$P,
+  cid = d$contact_id
+)
+
+#intercept only model
+m11.9 <- ulam(
+  alist(
+    T ~ dpois(lambda),
+    log(lambda) <- a,
+    a~dnorm(3, 0.5)
+  ), data = dat, chains = 4, cores = 4, log_lik=TRUE
+)
+
+
+
+#interaction model
+
+m11.10 <- ulam(
+  alist(
+    T ~ dpois(lambda),
+    log(lambda) <- a[cid] + b[cid]*P,
+    a[cid]~dnorm(3, 0.5),
+    b[cid]~dnorm(0, .2)
+  ), data = dat, chains = 4, cores = 4, log_lik=TRUE
+)
+
+compare(m11.9, m11.10, func = PSIS)
+
+k <- PSIS(m11.10, pointwise=TRUE)$k
+plot(dat$P, dat$T, xlab="log population(std)", ylab="total tools",
+     col=rangi2, pch=ifelse(dat$cid==1, 1, 16), lwd=2, ylim = c(0,75), cex=1+normalize(k))
+ns <- 100
+P_seq <- seq(from = -1.4, to = 3, length.out=ns)
+
+#low contact (cid = 1)
+lambda <- link(m11.10, data = data.frame(P=P_seq, cid=1))
+lmu <- apply(lambda, 2, mean)
+lci <- apply(lambda, 2, PI)
+lines(P_seq, lmu, lty=2, lwd=1.5)
+shade(lci, P_seq, xpd=TRUE)
+
+#high contact(cid = 2)
+lambda <- link(m11.10, data = data.frame(P=P_seq, cid=2))
+lmu <- apply(lambda, 2, mean)
+lci <- apply(lambda, 2, PI)
+lines(P_seq, lmu, lty=1, lwd=1.5)
+shade(lci, P_seq, xpd=TRUE)
+
+#Population on natural scale
+plot(d$population, d$total_tools, xlab = "population",
+     ylab = "total tools", col=rangi2, pch = ifelse(dat$cid==1, 1,16), lwd=2,
+     ylim=c(0,75), cex=1+normalize(k))
+ns <- 100
+P_seq <- seq(from= -5, to = 3, length.out=ns)
+pop_seq <- exp(P_seq*1.53 + 9)
+
+lambda <- link(m11.10, data = data.frame(P=P_seq, cid=1))
+lmu <- apply(lambda,2,mean)
+lci <- apply(lambda, 2, PI)
+lines(pop_seq, lmu, lty=2, lwd=1.5)
+shade(lci, pop_seq, xpd=TRUE)
+lambda <- link(m11.10, data = data.frame(P=P_seq, cid=2))
+lmu <- apply(lambda, 2, mean)
+lci <- apply(lambda, 2, PI)
+lines(pop_seq, lmu, lty=1, lwd=1.5)
+shade(lci, pop_seq, xpd=TRUE)
+
+#overthinking box
+dat2 <- list(T=d$total_tools, P=d$population, cid = d$contact_id)
+m11.11 <- ulam(
+  alist(
+    T ~ dpois(lambda),
+    lambda <- exp(a[cid])*P^b[cid]/g,
+    a[cid] ~ dnorm(1,1),
+    b[cid] ~ dexp(1),
+    g ~ dexp(1)
+  ), data = dat2, chain = 4, cores = 4, log_lik=TRUE
+)
+#doesn't plot correctly
+plot(d$population, d$total_tools, xlab = "population",
+     ylab = "total tools", col=rangi2, pch = ifelse(dat$cid==1, 1,16), lwd=2,
+     ylim=c(0,75), cex=1+normalize(k))
+ns <- 100
+P_seq <- seq(from= -5, to = 3, length.out=ns)
+pop_seq <- exp(P_seq*1.53 + 9)
+
+lambda <- link(m11.11, data = data.frame(P=P_seq, cid=1))
+lmu <- apply(lambda,2,mean)
+lci <- apply(lambda, 2, PI)
+lines(pop_seq, lmu, lty=2, lwd=1.5)
+shade(lci, pop_seq, xpd=TRUE)
+lambda <- link(m11.11, data = data.frame(P=P_seq, cid=2))
+lmu <- apply(lambda, 2, mean)
+lci <- apply(lambda, 2, PI)
+lines(pop_seq, lmu, lty=1, lwd=1.5)
+shade(lci, pop_seq, xpd=TRUE)
+
+
+#pg 357
+num_days <- 30
+y <- rpois(num_days,1.5)
+num_weeks <- 4
+y_new <- rpois(num_weeks,.5*7)
+
+y_all <- c(y,y_new)
+exposure <- c(rep(1,30), rep(7,4))
+monastery <- c(rep(0,30), rep(1,4))
+d <- data.frame(y = y_all, days = exposure, monastery = monastery)
+
+d$log_days <- log(d$days)
+m11.12 <- quap(
+  alist(
+    y~dpois(lambda),
+    log(lambda) <- log_days + a + b*monastery,
+    a ~ dnorm(0,1),
+    b ~ dnorm(0,1)
+  ), data = d
+)
+
+post <- extract.samples(m11.12)
+lambda_old <- exp(post$a)
+lambda_new <- exp(post$a + post$b)
+precis(data.frame(lambda_old, lambda_new))
